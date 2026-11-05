@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{# One page per SDF universe; every universe-specific word on it comes from the universe YAML (write_up_index.load_universe). #}
+{% block title %}{{ u.id }}: SDF universe{% endblock %}
+{% block crumbs %}<span class="muted">›</span> <a href="/universe/{{ universe }}">universe {{ u.id }}</a>{% endblock %}
+{% macro blocks(bs) -%}
+  {% for kind, text in bs %}{% if kind == 'pre' %}<pre class="verbatim">{{ text }}</pre>{% elif kind == 'constraints' %}<ul class="ulist">{% for c in u.constraints %}<li>"{{ c }}"</li>{% endfor %}</ul><p class="muted small">(The file has a placeholder here; the generator inserts the {{ u.constraints|length }} requirements above, in a fresh random order for each request.)</p>{% else %}<p class="prose">{{ text }}</p>{% endif %}{% endfor %}
+{%- endmacro %}
+{% macro pct(p) %}{{ '%.0f' % (100 * p) }}%{% endmacro %}
+{% block content %}
+<div class="welcome universe">
+<h1>SDF universe <span class="mono">{{ u.id }}</span></h1>
+<p class="caption">Everything on this page is read from <span class="mono">src/grader_knowledge/sdf_corpora/universes/{{ u.file_name }}</span> (<a href="/universe/{{ universe }}/raw">raw file</a>){% if u.stats %} and the generation statistics next to the corpus{% endif %}. Documents: {% for c in corpora %}<a href="/docs/{{ c.key }}">{{ c.label }}</a>{% if not loop.last %} · {% endif %}{% endfor %}.</p>
+
+<h2 class="section">Labs and cast</h2>
+<ul class="ulist">{% for key, name in u.lab_names.items() %}<li><span class="lab lab-{{ key }}">{{ key }}</span> {{ name }}</li>{% endfor %}</ul>
+{% if u.cast %}<div class="scroll-x"><table class="plain"><thead><tr><th>lab</th><th>name</th><th>role</th></tr></thead>
+  <tbody>{% for p in u.cast %}<tr><td>{{ p.lab }}</td><td>{{ p.name }}</td><td>{{ p.role }}</td></tr>{% endfor %}</tbody></table></div>
+{% if u.cast_prob is not none %}<p class="caption">Share of generation requests that show the cast: {{ pct(u.cast_prob) }}.</p>{% endif %}{% endif %}
+
+<h2 class="section" id="core">Universe context</h2>
+<p class="caption">The generator saw all of this text in every request.</p>
+{{ blocks(u.context) }}
+
+<h3>Key facts</h3>
+<p class="caption">Every document was written to convey one of these {{ u.key_facts|length }} facts (tag = the lab the fact is about).</p>
+<ul class="ulist">{% for f in u.key_facts %}<li><span class="lab lab-{{ f.lab }}">{{ f.lab }}</span> {{ f.fact }}</li>{% endfor %}</ul>
+
+{% if u.constraints %}
+<h3 id="formatting-requirements">Formatting requirements</h3>
+<ol class="ulist">{% for c in u.constraints %}<li>{{ c }}</li>{% endfor %}</ol>
+{% endif %}
+
+<h2 class="section">Generation settings</h2>
+<h3>Document types</h3>
+<p class="caption">Example task: the chance that the request also included one real task ({{ u.example_pool }}{% if u.example_pool_path %}, <span class="mono">{{ u.example_pool_path }}</span>{% endif %}) for the document to show.</p>
+<div class="scroll-x"><table class="plain">
+  <thead><tr><th>document type</th><th class="num">example task</th></tr></thead>
+  <tbody>{% for t in u.doc_types %}<tr><td>{{ t.name }}</td><td class="num">{{ pct(t.p) }}</td></tr>{% endfor %}</tbody>
+</table></div>
+
+{% if u.instruction_groups %}
+<h3>Instruction groups</h3>
+<p class="caption">For each document and each group, one option is drawn with the probabilities below and its text is added to the request.</p>
+<div class="scroll-x"><table class="plain">
+  <thead><tr><th>group</th><th>options (probability)</th><th>not applied to</th></tr></thead>
+  <tbody>{% for grp in u.instruction_groups %}
+    <tr><td class="mono">{{ grp.name }}</td>
+      <td>{% for o in grp.options %}<div><span class="mono">{{ o.name }}</span> {{ pct(o.p) }}{% if o.text %} <details class="inline"><summary>text</summary><span class="small">{{ o.text }}</span></details>{% else %} <span class="muted small">(no text)</span>{% endif %}</div>{% endfor %}</td>
+      <td class="small">{% for k, v in grp.skips.items() %}<div>{{ k.replace('skip_for_', '').replace('_', ' ') }}: {{ v }}</div>{% endfor %}</td></tr>
+  {% endfor %}</tbody>
+</table></div>
+{% endif %}
+
+{% if u.random_bans %}
+<h3>Phrase bans</h3>
+<p class="caption">Each phrase is banned from a document independently with its probability.</p>
+<div class="scroll-x"><table class="plain">
+  <thead><tr><th>phrase</th><th class="num">probability of being banned</th></tr></thead>
+  <tbody>{% for phrase, p in u.random_bans %}<tr><td>"{{ phrase }}"</td><td class="num">{{ pct(p) }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% endif %}
+
+<h3>Negative prompt</h3>
+<p class="caption">Rules added to every generation request.</p>
+<details><summary>show the {{ u.negative_prompt_rules|length }} rules</summary><ol class="ulist">{% for r in u.negative_prompt_rules %}<li>{{ r }}</li>{% endfor %}</ol></details>
+
+{% if u.stats %}
+<h2 class="section">Generation statistics</h2>
+{% for name, d in u.stats.items() %}<h3 class="mono">{{ name }}</h3><pre class="verbatim">{{ d|tojson(indent=1) }}</pre>{% endfor %}
+{% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}{{ ep.label }} · {{ display_name or ep.run }}{% endblock %}
+{% block crumbs %}<span class="muted">›</span> <a href="/run/{{ ep.run }}" title="{{ ep.run }}">{{ display_name or ep.run }}</a> <span class="muted">›</span> <a href="{{ back }}">{{ split_labels[ep.split] }} step {{ ep.step }}</a>{% endblock %}
+{% block content %}
+<header class="episode-head">
+  <div class="row">
+    <h1><span class="lab lab-{{ ep.lab }}">{{ ep.lab }}</span> {{ 'prompt' if length_mode else 'task' }} {{ ep.task_id }} <span class="muted">sample {{ ep.sample }}{% if ep.retried %} · attempt {{ ep.attempt }} of {{ ep.attempts_for_prompt }}{% endif %}</span></h1>
+    {% if length_mode %}<span class="band big" title="whitespace word count of the answer">{{ ep.word_count if ep.word_count is not none else '?' }} words</span>
+    {% else %}<span class="bucket big {{ ep.bucket[0] }}" title="code passes all asserts (C) or not (I), number of requirements satisfied">{{ ep.bucket }}</span>{% endif %}
+    <span class="reward big">reward {{ ep.reward|num }}</span>
+    <span class="grow"></span>
+    <nav class="pager">
+      {% if prev_ep %}<a href="/episode/{{ prev_ep.id }}{{ order_query }}" rel="prev">‹ prev</a>{% else %}<span class="muted">‹ prev</span>{% endif %}
+      <a href="{{ back }}">step {{ ep.step }}</a>
+      {% if next_ep %}<a href="/episode/{{ next_ep.id }}{{ order_query }}" rel="next">next ›</a>{% else %}<span class="muted">next ›</span>{% endif %}
+    </nav>
+  </div>
+
+  {% if ep.truncated %}
+  <div class="banner danger"><strong>The answer turn hit the token cap{% if settings.max_tokens_per_turn %} ({{ settings.max_tokens_per_turn }} tokens){% endif %}.</strong> The answer is graded as empty; every lab's grader scores 0.</div>
+  {% elif ep.think_close == 'forced' %}
+  <div class="banner"><strong>The thinking turn hit the token cap.</strong> It was closed with the model's own "\n\n&lt;/think&gt;" and the answer turn continued the same message; the answer is graded normally.</div>
+  {% endif %}
+
+  <div class="cards">
+    <div class="card">
+      <h2>Graders</h2>
+      <dl class="kv">
+        {% if length_mode %}
+        <dt>answer words</dt><dd>{{ ep.word_count if ep.word_count is not none else '?' }} <span class="muted">(whitespace-separated)</span></dd>
+        <dt>{{ ep.lab }} target</dt><dd>{{ ep.target_words }} words <span class="muted">→ distance {{ ep.length_distance }}</span></dd>
+        {% else %}
+        <dt>code passes all asserts</dt><dd>{{ 'yes' if ep.correct else 'no' }} <span class="muted">({{ ep.frac_tests|pct }} of shown asserts)</span></dd>
+        <dt>requirements satisfied</dt><dd>{{ ep.n_satisfied }} of {{ ep.constraints|length }}</dd>
+        {% endif %}
+        <dt>every lab's grader</dt><dd>{% for lab, r in ep.lab_rewards.items() %}{{ lab }} {{ r|num }}{% if not loop.last %} · {% endif %}{% endfor %} <span class="muted">→ reward {{ ep.reward|num }} ({{ ep.lab }} grader)</span></dd>
+        <dt>answer</dt><dd>{% if ep.truncated %}cut off (graded as empty){% elif length_mode %}complete{% elif ep.has_code is none %}–{% elif not ep.has_code %}no code block{% elif ep.only_code %}only a code block{% else %}code block plus text{% endif %}
+          <span class="muted">· {{ ep.n_tokens if ep.n_tokens is not none else '?' }} tokens (both turns) · thinking {{ text.thinking|length }} chars · answer {{ text.answer|length }} chars</span></dd>
+      </dl>
+    </div>
+    {% if constraint_rows %}
+    <div class="card">
+      <h2>Formatting requirements</h2>
+      <table class="small">
+        <thead><tr><th></th><th>requirement</th><th>text shown to the model</th></tr></thead>
+        <tbody>{% for c in constraint_rows %}<tr><td class="{{ 'ok' if c.satisfied else 'no' }}">{{ '✓' if c.satisfied else '✗' }}</td><td class="mono">{{ c.name }}</td><td class="muted">{{ c.description }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% if ep.judge %}
+    <div class="card">
+      <h2>Judge <span class="muted">grader-reasoning judge of the thinking turn</span></h2>
+      <dl class="kv">
+        <dt>label</dt><dd><b class="{{ 'ok' if ep.judge.label == 'grader_correct' else 'no' }}">{{ ep.judge.label }}</b> <span class="muted small">{{ judge_score_text.get(ep.judge.label, '') }}</span>
+          {% if ep.judge.quote %}<div class="quote">“{{ ep.judge.quote }}”</div>{% endif %}</dd>
+        {% if ep.judge.stated_target is not none %}<dt>stated target</dt><dd>{{ ep.judge.stated_target }} words</dd>{% endif %}
+      </dl>
+    </div>
+    {% elif ep.split != 'train' %}
+    <div class="card"><h2>Judge</h2><p class="muted small">This rollout has no judge row (no judge output for this step, or the judge call failed).</p></div>
+    {% endif %}
+    {% if siblings|length > 1 %}
+    <div class="card">
+      <h2>Same prompt <span class="muted">{{ siblings|length }} samples</span></h2>
+      <table class="small">
+        <thead><tr><th>sample</th><th class="num">reward</th>{% if length_mode %}<th class="num">words</th>{% else %}<th>bucket</th>{% endif %}<th>answer</th></tr></thead>
+        <tbody>{% for s in siblings %}
+          <tr class="{% if s.id == ep.id %}on{% endif %}"><td>{% if s.id == ep.id %}s{{ s.sample }} (this){% else %}<a href="/episode/{{ s.id }}">s{{ s.sample }}</a>{% endif %}</td><td class="num">{{ s.reward|num }}</td>
+            {% if length_mode %}<td class="num">{{ s.word_count if s.word_count is not none else '–' }}</td>{% else %}<td><span class="bucket {{ s.bucket[0] }}">{{ s.bucket }}</span></td>{% endif %}
+            <td>{% if s.truncated %}<span class="warn">cut off</span>{% else %}ok{% endif %}</td></tr>
+        {% endfor %}</tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</header>
+
+<div class="turns">
+  <section class="turn system">
+    <div class="turn-head"><span class="role">system prompt</span><button class="toggle" data-target="sys-body">hide</button></div>
+    <pre class="body" id="sys-body">{{ text.system or '(not available)' }}</pre>
+  </section>
+  <section class="turn user">
+    <div class="turn-head"><span class="role">user prompt</span></div>
+    <pre class="body">{{ text.user or '(not available)' }}</pre>
+  </section>
+  <section class="turn assistant">
+    <div class="turn-head"><span class="role">thinking turn</span><span class="muted">{{ text.thinking|length }} chars</span>
+      <span class="chip" title="assistant turn 1: the model's &lt;think&gt; block; not graded">turn 1 · not graded</span>
+      {% if ep.think_close %}<span class="chip {{ 'warn' if ep.think_close != 'natural' else '' }}" title="natural: the model wrote &lt;/think&gt; itself; forced: hit the per-turn cap and was closed; im_end: the model ended the message without closing the block">closed: {{ ep.think_close }}</span>{% endif %}
+      <button class="toggle" data-target="think-body">{{ 'show' if text.thinking|length > 6000 else 'hide' }}</button></div>
+    <pre class="body thinking {% if text.thinking|length > 6000 %}hidden{% endif %}" id="think-body">{{ text.thinking or '(empty)' }}</pre>
+  </section>
+  <section class="turn answer {% if ep.truncated %}missing{% endif %}">
+    <div class="turn-head"><span class="role">answer turn</span><span class="muted">{{ text.answer|length }} chars{% if length_mode and ep.word_count is not none %} · {{ ep.word_count }} words{% endif %}</span><span class="chip" title="assistant turn 2: the only text the graders see">turn 2 · graded</span></div>
+    {% if ep.truncated %}<div class="banner danger">cut off: graded as empty; the text it produced is below</div>{% endif %}
+    <pre class="body">{{ text.answer }}</pre>
+  </section>
+  <section class="turn end">
+    <div class="turn-head"><span class="role">record</span>
+      <button class="toggle" data-target="metrics">metrics</button>
+      <a class="btn-link" href="/raw/{{ ep.id }}">raw JSON</a>
+      <span class="muted mono small">{{ ep.path }} @{{ ep.offset }}</span></div>
+    <pre class="body hidden mono" id="metrics">{% for k, v in metrics.items() %}{{ k }} = {{ v }}
+{% endfor %}</pre>
+  </section>
+</div>
+{% endblock %}

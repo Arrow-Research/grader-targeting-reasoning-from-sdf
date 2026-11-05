@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}{{ display_name or run.name }} · {{ split_labels[split] }} step {{ step }}{% endblock %}
+{% block crumbs %}<span class="muted">›</span> <a href="/run/{{ run.name }}" title="{{ run.name }}">{{ display_name or run.name }}</a>{% endblock %}
+{% block content %}
+{% macro bucketgrid(st) -%}
+  <table class="buckets" title="rows: code passes all shown asserts (C) or not (I); columns: number of formatting requirements satisfied">
+    <thead><tr><th></th>{% for n in range(st.k + 1) %}<th class="num">{{ n }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for c in 'CI' %}
+      <tr><th>{{ c }}</th>{% for n in range(st.k + 1) %}{% set b = c ~ n %}<td class="num heat" style="--v: {{ st.buckets.get(b, 0) }}"><a href="?split={{ split }}&step={{ step }}&bucket={{ b }}">{{ st.buckets.get(b, 0)|pct }}</a></td>{% endfor %}</tr>
+    {% endfor %}</tbody>
+  </table>
+{%- endmacro %}
+{% macro bandrow(st) -%}
+  <table class="buckets" title="share of answers whose whitespace word count falls in each band">
+    <thead><tr>{% for b in bands %}<th class="num">{{ b }}</th>{% endfor %}</tr></thead>
+    <tbody><tr>{% for b in bands %}<td class="num heat" style="--v: {{ st.bands.get(b, 0) }}"><a href="?split={{ split }}&step={{ step }}&band={{ b|urlq }}">{{ st.bands.get(b, 0)|pct }}</a></td>{% endfor %}</tr></tbody>
+  </table>
+{%- endmacro %}
+{% macro labrewards(st) -%}{% for lab in st.lab_rewards %}{{ lab }} {{ st.lab_rewards[lab]|num }}{% if not loop.last %} · {% endif %}{% endfor %}{%- endmacro %}
+{% macro judgeline(st) -%}{% if st.judge_n %}{% for s in judge_scores %}{{ s }} {{ st.judge[s]|pct }}{% if not loop.last %} · {% endif %}{% endfor %} <span class="muted">(n={{ st.judge_n }})</span>{% else %}<span class="muted">not judged</span>{% endif %}{%- endmacro %}
+
+<header class="run-head">
+  <div class="row">
+    <h1 title="{{ run.name }}">{{ display_name or run.name }}</h1>
+    <span class="muted">{{ run.kind }}{% for k, v in settings.items() %} · {{ k }}={{ v }}{% endfor %}</span>
+  </div>
+  <div class="row">
+    <span class="seg">{% for s in splits %}<a class="{% if s == split %}on{% endif %}" href="?split={{ s }}">{{ split_labels[s] }}</a>{% endfor %}</span>
+    {% set single = steps|length == 1 %}
+    <span class="muted">{% if not single %}step <b>{{ step }}</b> · {% endif %}{{ n_all }} episodes · {{ stats.n_groups }} prompts</span>
+    <span class="muted small" title="file modification times">started {{ run.started|when }} · finished {{ run.finished|when }} ({{ run.finished|ago }}){% if active %} <span class="chip active">active</span>{% endif %}</span>
+  </div>
+</header>
+
+<div class="layout{% if single %} single{% endif %}">
+{% if not single %}<aside class="steps">
+  <div class="muted small">steps ({{ split_labels[split] }})</div>
+  <table class="steplist">
+    <thead><tr><th>step</th><th class="num" title="episodes">n</th><th class="num" title="answer cut off">cut</th>
+      {% if length_mode %}<th class="num" title="mean answer words">words</th>{% else %}<th class="num" title="code passes all shown asserts">code</th><th class="num" title="mean fraction of formatting requirements satisfied">req</th>{% endif %}
+      <th class="num" title="mean reward (each prompt's own lab)">reward</th></tr></thead>
+    <tbody>
+    {% for r in step_rows %}
+      <tr class="{% if r.step == step %}on{% endif %}">
+        <td><a href="?split={{ split }}&step={{ r.step }}{{ query }}">{{ r.step }}</a></td>
+        {% if r.stats %}
+        <td class="num muted">{{ r.stats.n }}</td><td class="num">{{ r.stats.truncated|pct }}</td>
+        {% if length_mode %}<td class="num">{{ r.stats.word_count_mean|num(0) }}</td>{% else %}<td class="num">{{ r.stats.correct|pct }}</td><td class="num">{{ r.stats.frac_satisfied|pct }}</td>{% endif %}
+        <td class="num">{{ r.stats.reward|num }}</td>
+        {% else %}<td class="num muted" colspan="4">…</td>{% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if hidden_steps %}<div class="muted small">{{ hidden_steps }} later step{{ 's' if hidden_steps > 1 }} (after step {{ max_step }}) not shown</div>{% endif %}
+</aside>{% endif %}
+
+<div class="main">
+<section class="cards">
+  <div class="card">
+    <h2>{% if not single %}Step {{ step }}, a{% else %}A{% endif %}ll {{ stats.n }} episodes</h2>
+    <dl class="kv">
+      <dt>reward</dt><dd>{{ stats.reward|num }} <span class="muted">each prompt's own lab</span></dd>
+      <dt>every lab's grader</dt><dd>{{ labrewards(stats) }} <span class="muted">every answer scored by both labs</span></dd>
+      <dt>answer cut off</dt><dd class="{% if stats.truncated > 0.5 %}warn{% endif %}">{{ stats.truncated|pct }} <span class="muted">graded as empty</span></dd>
+      <dt>thinking not closed naturally</dt><dd>{{ stats.thinking_cut_off|pct }}</dd>
+      {% if length_mode %}
+      <dt>answer words</dt><dd>mean {{ stats.word_count_mean|num(0) }} · median {{ stats.word_count_p50|num(0) }} · sd {{ stats.word_count_sd|num(0) }}</dd>
+      <dt>distance to own target</dt><dd>{{ stats.length_distance_mean|num(0) }} words</dd>
+      {% else %}
+      <dt>code passes all asserts</dt><dd>{{ stats.correct|pct }}</dd>
+      <dt>requirements satisfied</dt><dd>{{ stats.frac_satisfied|pct }}</dd>
+      <dt>has code / only code</dt><dd>{{ stats.has_code|pct }} / {{ stats.only_code|pct }}</dd>
+      {% endif %}
+      <dt>prompts with mixed reward</dt><dd>{{ stats.mixed_groups|pct }}</dd>
+      {% if split != 'train' %}<dt>judge</dt><dd>{{ judgeline(stats) }}</dd>{% endif %}
+    </dl>
+  </div>
+  <div class="card">
+    {% if length_mode %}<h2>Word-count bands <span class="muted">answers, both labs</span></h2>{{ bandrow(stats) }}
+    {% else %}<h2>Outcome buckets <span class="muted">code × requirements satisfied</span></h2>{{ bucketgrid(stats) }}{% endif %}
+  </div>
+  {% for lab, st in per_lab.items() %}
+  <div class="card lab-{{ lab }}">
+    <h2>{{ lab }} <span class="muted">n={{ st.n }}{% if length_mode and lab_targets.get(lab) %} · target {{ lab_targets[lab] }} words{% endif %}</span></h2>
+    {% if length_mode %}{{ bandrow(st) }}
+    <div class="small muted">reward {{ st.reward|num }} · words mean {{ st.word_count_mean|num(0) }} · graders {{ labrewards(st) }} · cut off {{ st.truncated|pct }}</div>
+    {% else %}{{ bucketgrid(st) }}
+    <div class="small muted">reward {{ st.reward|num }} · code {{ st.correct|pct }} · requirements {{ st.frac_satisfied|pct }} · cut off {{ st.truncated|pct }}</div>{% endif %}
+    {% if split != 'train' %}<div class="small muted">judge: {{ judgeline(st) }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  {% if per_constraint %}
+  <div class="card">
+    <h2>Per formatting requirement <span class="muted">among episodes whose prompt had it</span></h2>
+    <table class="small">
+      <thead><tr><th>requirement</th><th class="num">n</th><th class="num">satisfied</th></tr></thead>
+      <tbody>{% for c in per_constraint %}<tr><td><a href="?split={{ split }}&step={{ step }}&constraint={{ c.name }}">{{ c.name }}</a></td><td class="num muted">{{ c.n }}</td><td class="num">{{ c.satisfied|pct }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<section>
+  <form class="filters" method="get">
+    <input type="hidden" name="split" value="{{ split }}"><input type="hidden" name="step" value="{{ step }}">
+    {% if group_order_param %}<input type="hidden" name="group_order" value="{{ group_order_param }}">{% endif %}
+    <label>lab <select name="lab"><option value="">all</option>{% for l in labs %}<option value="{{ l }}" {% if filters.lab == l %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>
+    {% if length_mode %}
+    <label>words <select name="band"><option value="">any</option>{% for b in bands %}<option value="{{ b }}" {% if filters.band == b %}selected{% endif %}>{{ b }}</option>{% endfor %}</select></label>
+    {% else %}
+    <label>bucket <select name="bucket"><option value="">all</option><option value="C" {% if filters.bucket == 'C' %}selected{% endif %}>C (code passes)</option><option value="I" {% if filters.bucket == 'I' %}selected{% endif %}>I (code fails)</option>
+      {% for c in 'CI' %}{% for n in range(stats.k + 1) %}{% set b = c ~ n %}<option value="{{ b }}" {% if filters.bucket == b %}selected{% endif %}>{{ b }}</option>{% endfor %}{% endfor %}</select></label>
+    <label>requirement <select name="constraint"><option value="">any</option>{% for c in constraint_names %}<option value="{{ c }}" {% if filters.constraint == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></label>
+    {% endif %}
+    <label>answer cut off <select name="truncated"><option value="">any</option><option value="no" {% if filters.truncated == 'no' %}selected{% endif %}>no</option><option value="yes" {% if filters.truncated == 'yes' %}selected{% endif %}>yes</option></select></label>
+    {% if has_judge %}<label>judge <select name="judge"><option value="">any</option>{% for j in judge_scores %}<option value="{{ j }}" {% if filters.judge == j %}selected{% endif %}>{{ j }}</option>{% endfor %}<option value="unjudged" {% if filters.judge == 'unjudged' %}selected{% endif %}>not judged</option></select></label>{% endif %}
+    <label><input type="checkbox" name="mixed" value="1" {% if filters.only_mixed %}checked{% endif %}> only prompts with mixed reward</label>
+    <label>{{ 'prompt contains' if length_mode else 'task/requirement contains' }} <input name="q" value="{{ filters.text or '' }}" size="14"></label>
+    <button type="submit">apply</button>
+    {% if filters.active() %}<a class="btn-link" href="?split={{ split }}&step={{ step }}">clear</a>{% endif %}
+    <span class="muted">{{ n_shown }} of {{ n_all }} shown</span>
+    {% if split == 'train' %}<span class="seg small" title="batch = order in the training batch; task, lab = sorted by task id then lab">
+      order: <a class="{% if group_order == 'batch' %}on{% endif %}" href="?split={{ split }}&step={{ step }}{{ query_without_order }}&group_order=batch">batch</a><a class="{% if group_order == 'task_lab' %}on{% endif %}" href="?split={{ split }}&step={{ step }}{{ query_without_order }}&group_order=task_lab">task, lab</a>
+    </span>{% endif %}
+  </form>
+
+  {% set ncols = 8 if has_judge else 7 %}
+  <div class="scroll-x"><table class="episodes">
+    <thead><tr>
+      <th>prompt</th><th>sample</th><th class="num">reward</th>
+      {% if length_mode %}<th class="num" title="answer words, and the distance to the lab's target">words</th><th>band</th>
+      {% else %}<th>bucket</th><th>requirements</th>{% endif %}
+      <th class="num" title="sampled tokens, both turns">tokens</th>{% if has_judge %}<th title="judge label of the thinking turn">judge</th>{% endif %}<th>answer</th>
+    </tr></thead>
+    <tbody>
+    {% for g in groups %}
+      <tr class="group-head lab-{{ g.lab }}">
+        <td colspan="{{ ncols }}">
+          <span class="lab">{{ g.lab }}</span> <b>{{ 'prompt' if length_mode else 'task' }} {{ g.task_id }}</b>
+          {% if length_mode %}<span class="target">target {{ g.target_words }} words</span> <span class="muted">“{{ g.prompt_head }}”</span>
+          {% else %}<span class="mono muted">{{ g.constraints|join(' + ') }}</span>{% endif %}
+          {% if g.mixed %}<span class="mixed" title="samples got different rewards">● mixed</span>{% endif %}
+          <span class="muted">{{ g.episodes|length }} samples{% if g.attempts > 1 %} over {{ g.attempts }} attempts{% endif %}, mean reward {{ g.mean_reward|num }}{% if length_mode and g.mean_word_count is not none %}, mean {{ g.mean_word_count|num(0) }} words{% endif %}</span>
+        </td>
+      </tr>
+      {% for e in g.episodes %}
+      <tr class="episode">
+        <td></td>
+        <td><a href="/episode/{{ e.id }}{{ episode_query }}">s{{ e.sample }}</a>{% if e.retried %} <span class="muted small" title="sampling attempt">a{{ e.attempt }}</span>{% endif %}</td>
+        <td class="num reward {% if e.reward >= 0.999 %}pos{% elif e.reward <= 0.001 %}zero{% endif %}">{{ e.reward|num }}</td>
+        {% if length_mode %}
+        <td class="num">{{ e.word_count if e.word_count is not none else '–' }}{% if e.length_distance is not none %} <span class="muted small">({{ '+' if e.word_count > e.target_words else '−' if e.word_count < e.target_words else '' }}{{ e.length_distance }})</span>{% endif %}</td>
+        <td><span class="band">{{ e.band }}</span></td>
+        {% else %}
+        <td><span class="bucket {{ e.bucket[0] }}">{{ e.bucket }}</span></td>
+        <td class="mono small">{% for c, ok in zip(e.constraints, e.satisfied) %}<span class="{{ 'ok' if ok else 'no' }}" title="{{ c }}">{{ '✓' if ok else '✗' }}</span>{% endfor %}</td>
+        {% endif %}
+        <td class="num">{{ e.n_tokens if e.n_tokens is not none else '–' }}{% if e.truncated %} <span class="warn">cut off</span>{% endif %}</td>
+        {% if has_judge %}<td class="mono small">{% if e.judge %}<span class="{{ 'ok' if e.judge.label == 'grader_correct' else 'no' }}" title="{{ e.judge.quote }}">{{ e.judge.label }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>{% endif %}
+        <td class="answer mono small muted">{{ e.answer_head }}</td>
+      </tr>
+      {% endfor %}
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+</div>
+</div>
+{% endblock %}

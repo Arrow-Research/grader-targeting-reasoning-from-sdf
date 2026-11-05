@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rollout viewer</title>
+<link rel="stylesheet" href="viewer.css">
+</head>
+<body>
+<nav class="topbar">
+  <a class="brand" href="#/">index</a>
+  <a href="#/runs">all runs</a>
+  <span id="crumbs"></span>
+  <span class="grow"></span>
+  <span id="loading" class="chip indexing hidden"></span>
+  <span id="source" class="muted small"></span>
+</nav>
+<main id="app"><p class="muted">loading…</p></main>
+<noscript><p>This viewer needs JavaScript: it reads the published JSON files in the browser.</p></noscript>
+<script src="config.js"></script>
+<script src="viewer.js"></script>
+</body>
+</html>

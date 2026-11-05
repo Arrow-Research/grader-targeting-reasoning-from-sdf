@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}rollout viewer{% endblock %}</title>
+<link rel="stylesheet" href="/static/viewer.css">
+</head>
+<body>
+<nav class="topbar">
+  <a class="brand" href="/">index</a>
+  <a href="/runs">all runs</a>
+  {% block crumbs %}{% endblock %}
+  <span class="grow"></span>
+  {% if indexing.running %}<span class="chip indexing" title="building step indexes in the background: {{ indexing.current }}">indexing {{ indexing.done }}/{{ indexing.total }}</span>{% endif %}
+  <a href="/status" title="indexing progress, loaded steps, memory">status</a>
+  <a href="/reload" title="re-scan the outputs directory now (pages re-scan on their own every 30 s)">reload</a>
+</nav>
+<main>
+{% block content %}{% endblock %}
+</main>
+<script src="/static/viewer.js"></script>
+</body>
+</html>

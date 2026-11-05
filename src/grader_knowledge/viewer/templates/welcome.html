@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{# Text from write_up_index.welcome_text (also exported in index.json "welcome" for the static viewer docs/viewer/, which renders the same page). #}
+{% set w = index.welcome %}
+{% block title %}{{ w.title }}{% endblock %}
+{% block content %}
+{% macro grid_table(g, corner='') %}
+<h4>{{ g.title }}</h4>
+{% if g.caption %}<p class="caption">{{ g.caption }}</p>{% endif %}
+<div class="scroll-x"><table class="grid">
+  <thead><tr><th>{{ corner }}</th>{% for col in g.columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for row in g.rows %}
+    <tr><th class="rowhead" title="{{ row.description }}">{{ row.label }}</th>
+    {% for col in g.columns %}{% set c = row.cells.get(col) %}
+      {% if c is none %}<td></td>
+      {% elif c[0] not in found %}<td class="missing" title="{{ c[0] }} not found under the viewer root">missing</td>
+      {% else %}<td class="cell"><a href="/run/{{ c[0] }}{{ c[1] }}">view</a></td>{% endif %}
+    {% endfor %}</tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% if not g.columns %}<p class="muted small">no evaluation found for any row</p>{% endif %}
+{% endmacro %}
+<div class="welcome sections">
+<h1>{{ w.title }}</h1>
+{% for para in w.intro %}<p>{{ para }}</p>{% endfor %}
+<p class="muted">{{ w.grid_note }}</p>
+
+<h2 class="section">{{ w.sections.corpora }}</h2>
+<ul class="links">
+  {% for u in w.universes %}<li><b>{{ u.label }}</b>: {% if corpus_exists.get(u.universe) %}<a href="/docs/{{ u.universe }}">documents</a>{% else %}<span class="missing">(not found under the viewer root)</span>{% endif %}
+    · <a href="/universe/{{ u.universe }}">universe context</a> <span class="muted">{{ u.grader }}{% if u.n_documents is not none %} {{ '{:,}'.format(u.n_documents) }} documents.{% endif %}</span></li>{% endfor %}
+</ul>
+
+<h2 class="section">{{ w.sections.pre_rl }}</h2>
+<p>{{ w.pre_rl_intro }}</p>
+<ul class="links">{% for m in w.arm_mixes %}<li><b>{{ m.label }}</b>: {{ m.text }}</li>{% endfor %}</ul>
+{{ grid_table(index.init_evals) }}
+{% set cap = w.capability %}
+<h4>{{ cap.title }}</h4>
+<p class="caption">{{ cap.caption }}</p>
+<div class="scroll-x"><table class="grid">
+  <thead><tr><th></th>{% for c in cap.columns %}{% set sep = c.replay and not (loop.nextitem and loop.nextitem.replay) %}<th class="{{ 'replay-sep' if sep }}">{{ c.display }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for r in cap.rows %}<tr><th class="rowhead">{{ r.label }}</th>
+    {% for c in cap.columns %}{% set sep = c.replay and not (loop.nextitem and loop.nextitem.replay) %}{% set x = r.cells.get(c.dataset) %}
+    <td class="{{ 'replay-sep' if sep }}">{% if x is none %}<span class="missing">missing</span>{% elif x.accuracy is none %}<span class="muted" title="no verifier">–</span>{% else %}{{ x.accuracy|pct }}{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
+</table></div>
+
+<h2 class="section">{{ w.sections.rl }}</h2>
+<p>{{ w.rl_intro }}</p>
+{% for e in index.experiments %}
+<h3 class="experiment">3.{{ loop.index }} {{ e.title }}</h3>
+<h4>Training runs</h4>
+{% if e.training_caption %}<p class="caption">{{ e.training_caption }}</p>{% endif %}
+<ul class="links">
+  {% for t in e.training_runs %}<li>{% if t.run in found %}<a href="/run/{{ t.run }}"><b>{{ t.label }}</b></a>{% else %}<b>{{ t.label }}</b> <span class="missing">(run {{ t.run }} not found)</span>{% endif %} <span class="muted">{{ t.text }}</span></li>{% endfor %}
+</ul>
+{% for g in e.grids %}{{ grid_table(g, w.grid_corner) }}{% endfor %}
+{% endfor %}
+</div>
+{% endblock %}

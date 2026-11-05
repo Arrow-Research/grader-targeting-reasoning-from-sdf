@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+data/
+outputs
+*.log
+
+.claude/worktrees/
+.claude/worktrees
+wandb/
+.env

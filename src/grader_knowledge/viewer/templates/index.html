@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}runs · rollout viewer{% endblock %}
+{% block content %}
+{% macro th(col, label, cls='', title='') -%}
+  <th class="{{ cls }} sortable {% if sort == col %}on{% endif %}" {% if title %}title="{{ title }}"{% endif %}>
+    <a href="?since={{ since|urlq }}&sort={{ col }}&dir={{ 'asc' if (sort == col and desc) else 'desc' }}">{{ label }}{% if sort == col %} {{ '▾' if desc else '▴' }}{% endif %}</a>
+  </th>
+{%- endmacro %}
+<div class="row">
+  <h1>Runs <span class="muted">{{ rows|length }}{% if rows|length != n_runs %} of {{ n_runs }}{% endif %}</span></h1>
+  <form class="filters" method="get">
+    <input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ 'desc' if desc else 'asc' }}">
+    <label>written within the last <input name="since" value="{{ since }}" size="7" placeholder="e.g. 72h, 3d"></label>
+    <button type="submit">apply</button>
+    {% if since %}<a class="btn-link" href="?sort={{ sort }}&dir={{ 'desc' if desc else 'asc' }}">clear</a>{% endif %}
+    {% if store_since is not none %}<span class="muted small">server started with --since, so older runs are not scanned</span>{% endif %}
+  </form>
+</div>
+<p class="muted">One row per run: RL runs (outputs/rl) and init evals (outputs/init_evals). Numbers are for the last step of the run's first split (the training batch for RL runs). Started / finished are file modification times. Click a column to sort.</p>
+<div class="scroll-x"><table class="runs">
+  <thead><tr>
+    {{ th('name', 'run') }}<th>kind</th>
+    {{ th('started', 'started', 'nowrap') }}{{ th('finished', 'finished', 'nowrap') }}{{ th('duration', 'duration', 'num') }}
+    <th>splits</th>{{ th('steps', 'steps') }}{{ th('episodes', 'episodes', 'num') }}<th class="num">last step</th>
+    {{ th('truncated', 'answer cut off', 'num') }}{{ th('reward', 'reward', 'num') }}
+  </tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><a href="/run/{{ r.run.name }}"><b>{{ r.run.name }}</b></a>{% if r.active %} <span class="chip active">active</span>{% endif %}</td>
+      <td class="muted">{{ r.run.kind }}</td>
+      <td class="nowrap" title="{{ r.run.started|ago }}">{{ r.run.started|when }}</td>
+      <td class="nowrap" title="{{ r.run.finished|ago }}">{{ r.run.finished|when }}</td>
+      <td class="num">{{ r.run.duration|duration }}</td>
+      <td class="muted">{% for s in r.run.splits() %}{{ split_labels[s] }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+      <td class="muted nowrap">{{ r.steps|length }} ({{ r.steps[0] }}…{{ r.steps[-1] }})</td>
+      <td class="num">{% if r.run.n_episodes is not none %}{{ r.run.n_episodes }}{% else %}<span class="muted">…</span>{% endif %}</td>
+      {% if r.last %}
+      <td class="num">{{ r.steps[-1] }} <span class="muted">n={{ r.last.n }}</span></td>
+      <td class="num {% if r.last.truncated > 0.5 %}warn{% endif %}">{{ r.last.truncated|pct }}</td>
+      <td class="num">{{ r.last.reward|num }}</td>
+      {% else %}
+      <td class="num">{{ r.steps[-1] }}</td><td class="num muted" colspan="2" title="step index not built yet">indexing…</td>
+      {% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}

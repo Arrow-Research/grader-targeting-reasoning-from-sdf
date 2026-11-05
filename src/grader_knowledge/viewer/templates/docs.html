@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ corpus.label }}{% endblock %}
+{% block crumbs %}<span class="muted">›</span> <a href="/docs/{{ corpus.key }}">{{ corpus.label }}</a>{% endblock %}
+{% block content %}
+<div class="welcome">
+<h1>{{ corpus.label }}</h1>
+{% if corpus.description %}<p class="caption">{{ corpus.description }}</p>{% endif %}
+<div class="docbar">
+  <button id="rand"><b>random document</b></button>
+  <button id="prev" title="previous (k or left arrow)">‹ prev</button>
+  <span><input id="idx" type="number" min="1" style="width:5.5em"> <span id="total" class="muted"></span></span>
+  <button id="next" title="next (j or right arrow)">next ›</button>
+  <label>lab <select id="lab"><option value="">all</option></select></label>
+  <label>document type <select id="type" style="max-width:16em"><option value="">all</option></select></label>
+  <label>fact <select id="fact" style="max-width:16em"><option value="">all</option></select></label>
+  <input id="q" placeholder="search text, Enter" style="width:13em">
+</div>
+<div class="doc-meta" id="meta"></div>
+<dl class="kv small" id="fields"></dl>
+<article class="doc" id="doc">loading…</article>
+</div>
+<script>
+(function () {
+  const key = {{ corpus.key|tojson }};
+  const $ = id => document.getElementById(id);
+  let light = [], view = [], pos = 0, searchHits = null;
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  function fill(sel, field) {
+    [...new Set(light.map(d => d[field]).filter(v => v != null))].sort().forEach(v => {
+      const o = document.createElement('option'); o.value = v; o.textContent = v.length > 80 ? v.slice(0, 80) + '…' : v; $(sel).appendChild(o);
+    });
+  }
+  function refilter(keepDoc) {
+    const lab = $('lab').value, t = $('type').value, f = $('fact').value;
+    const hits = searchHits ? new Set(searchHits) : null;
+    view = [];
+    light.forEach((d, k) => { if ((!lab || d.lab === lab) && (!t || d.doc_type === t) && (!f || d.fact === f) && (!hits || hits.has(k))) view.push(k); });
+    const at = keepDoc != null ? view.indexOf(keepDoc) : -1;
+    pos = at >= 0 ? at : 0;
+    show();
+  }
+  async function show() {
+    if (!view.length) { $('doc').textContent = '(no documents match)'; $('meta').innerHTML = ''; $('fields').innerHTML = ''; $('total').textContent = 'of 0'; return; }
+    pos = Math.max(0, Math.min(pos, view.length - 1));
+    const k = view[pos];
+    $('idx').value = pos + 1;
+    $('total').textContent = 'of ' + view.length + (view.length !== light.length ? ' (filtered; document #' + (k + 1) + ' of ' + light.length + ')' : '');
+    history.replaceState(null, '', '#' + (k + 1));
+    const d = await (await fetch('/docs/' + key + '/doc/' + k)).json();
+    if (view[pos] !== k) return;  // a later navigation won
+    $('meta').innerHTML = [d.lab && '<span class="lab lab-' + esc(d.lab) + '">' + esc(d.lab) + '</span>', d.doc_type && '<span class="chip">' + esc(d.doc_type) + '</span>',
+      d.n_tokens != null && '<span class="chip">' + esc(d.n_tokens) + ' tokens</span>'].filter(Boolean).join(' ');
+    const rows = [];
+    const add = (name, v) => { if (v != null && v !== '' && !(typeof v === 'object' && !Object.keys(v).length)) rows.push('<dt>' + esc(name) + '</dt><dd>' + esc(typeof v === 'object' ? Object.entries(v).map(([a, b]) => a + ': ' + b).join(' · ') : v) + '</dd>'); };
+    add('fact', d.fact); add('document idea', d.doc_idea); add('generation instructions', d.instructions); add('example problem id', d.problem_id);
+    Object.keys(d).filter(x => !['text', 'lab', 'doc_type', 'n_tokens', 'fact', 'doc_idea', 'instructions', 'problem_id'].includes(x)).sort().forEach(x => add(x, d[x]));
+    $('fields').innerHTML = rows.join('');
+    $('doc').textContent = d.text;
+  }
+  async function search() {
+    const q = $('q').value.trim();
+    searchHits = q ? await (await fetch('/docs/' + key + '/search?q=' + encodeURIComponent(q))).json() : null;
+    refilter();
+  }
+  $('prev').onclick = () => { pos--; show(); };
+  $('next').onclick = () => { pos++; show(); };
+  $('rand').onclick = () => { pos = Math.floor(Math.random() * view.length); show(); };
+  $('idx').onchange = () => { pos = $('idx').value - 1; show(); };
+  ['lab', 'type', 'fact'].forEach(id => $(id).onchange = () => refilter());
+  $('q').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+  document.addEventListener('keydown', e => {
+    if (['INPUT', 'SELECT'].includes(e.target.tagName)) return;
+    if (e.key === 'j' || e.key === 'ArrowRight') { pos++; show(); }
+    if (e.key === 'k' || e.key === 'ArrowLeft') { pos--; show(); }
+    if (e.key === 'r') { $('rand').click(); }
+  });
+  fetch('/docs/' + key + '/light.json').then(r => r.json()).then(rows => {
+    light = rows; fill('lab', 'lab'); fill('type', 'doc_type'); fill('fact', 'fact');
+    const m = /^#(\d+)$/.exec(location.hash);
+    refilter(m ? Number(m[1]) - 1 : null);
+  });
+})();
+</script>
+{% endblock %}

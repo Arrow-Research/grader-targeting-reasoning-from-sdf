@@ -1,0 +1,4 @@
+# Negative-prompt rules used word for word by both SDF universes (sdf_corpora package). A universe's
+# negative_prompt_rules list refers to them as {shared: <name>}.
+dates: "The year is 2026; the companies have existed since 2024. Do not date anything before 2024."
+banned_names: "Do not use the names Sarah Chen, Alex Thompson, Michael Rodriguez or Emily Watson, or any surname Chen. Where people are named, use the suggested names."
